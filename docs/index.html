@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FileShuttle: drop a file, get a link</title>
+  <meta name="description" content="A tiny macOS menu bar app that uploads to your own FTP, FTPS or SFTP server and puts the link on your clipboard.">
+  <meta property="og:title" content="FileShuttle">
+  <meta property="og:description" content="Drop a file. Get a link. A tiny macOS menu bar app for your own FTP, FTPS or SFTP server.">
+  <meta property="og:image" content="https://elalemanyo.github.io/fileshuttle/preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#5278db">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+      --ink: #141414;
+      --secondary: rgba(0, 0, 0, 0.5);
+      --hairline: rgba(0, 0, 0, 0.1);
+      --popover-top: #ececec;
+      --popover-bottom: #fbfbfb;
+      --text-shadow: 0 3px 22px rgba(31, 36, 97, 0.5);
+      --menubar-h: 30px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: var(--font);
+      color: var(--ink);
+      background: #5278db;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    button { font: inherit; color: inherit; }
+
+    /* ---------- Scene ---------- */
+    .scene {
+      position: relative;
+      min-height: 100vh;
+      min-height: 100svh;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 78% 69%, rgba(255, 242, 204, 0.95) 0, rgba(255, 217, 153, 0.35) 9vmax, rgba(255, 204, 153, 0) 34vmax),
+        linear-gradient(to top, #ffcc9e 0%, #f5bdb8 30%, #9eb3ed 62%, #5278db 100%);
+    }
+    .clouds, .hills, .trail { position: absolute; pointer-events: none; }
+    .clouds { inset: 0; width: 100%; height: 100%; }
+    .hills { left: 0; bottom: 0; width: 100%; height: max(31.25vh, 170px); }
+    .trail { left: 0; bottom: 0; width: min(50vw, 640px); height: auto; }
+
+    /* ---------- Menu bar ---------- */
+    .menubar {
+      position: fixed;
+      inset: 0 0 auto 0;
+      z-index: 20;
+      height: var(--menubar-h);
+      display: flex;
+      align-items: center;
+      padding: 0 14px 0 20px;
+      font-size: 13.5px;
+      background: rgba(255, 255, 255, 0.35);
+      -webkit-backdrop-filter: blur(24px) saturate(1.6);
+      backdrop-filter: blur(24px) saturate(1.6);
+      user-select: none;
+    }
+    .menubar .menus { display: flex; gap: 20px; white-space: nowrap; }
+    .menubar .menus b { font-weight: 700; }
+    .menubar .status { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .status-item {
+      display: grid;
+      place-items: center;
+      height: 24px;
+      min-width: 32px;
+      padding: 0 4px;
+      border: 0;
+      border-radius: 6px;
+      background: none;
+    }
+    .status-item svg { width: 17px; height: 17px; }
+    .status-item.fs { cursor: pointer; }
+    .status-item.fs[aria-expanded="true"] { background: rgba(255, 255, 255, 0.45); }
+    .clock { font-weight: 500; white-space: nowrap; padding-left: 6px; font-variant-numeric: tabular-nums; }
+
+    /* ---------- Hero ---------- */
+    .hero {
+      position: relative;
+      z-index: 2;
+      min-height: 100vh;
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: calc(var(--menubar-h) + 48px) clamp(24px, 6vw, 96px) max(31.25vh, 170px);
+      color: #fff;
+    }
+    .copy { max-width: min(680px, calc(100vw - 560px)); }
+    .brand { display: flex; align-items: center; gap: 14px; margin: 0 0 18px -8px; }
+    .brand img { width: clamp(64px, 6vw, 88px); height: auto; filter: drop-shadow(0 6px 14px rgba(31, 36, 97, 0.35)); }
+    .brand span { font-size: clamp(28px, 2.6vw, 38px); font-weight: 700; letter-spacing: -0.01em; text-shadow: var(--text-shadow); }
+    h1 {
+      margin: 0;
+      font-size: clamp(52px, 7.4vw, 108px);
+      line-height: 0.98;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      text-shadow: var(--text-shadow);
+    }
+    .lede {
+      margin: clamp(28px, 4vh, 48px) 0 0;
+      max-width: 36ch;
+      font-size: clamp(18px, 1.75vw, 25px);
+      line-height: 1.35;
+      font-weight: 500;
+      text-shadow: var(--text-shadow);
+      opacity: 0.96;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: clamp(28px, 4vh, 40px); }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      height: 52px;
+      padding: 0 22px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+    .btn svg { width: 20px; height: 20px; flex: none; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+    .btn-primary {
+      background: #fff;
+      color: #3b3f86;
+      box-shadow: 0 10px 30px -8px rgba(31, 36, 97, 0.55);
+    }
+    .btn-primary:hover { box-shadow: 0 14px 34px -8px rgba(31, 36, 97, 0.65); }
+    .btn-primary .version {
+      font-weight: 500;
+      font-size: 13px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(82, 120, 219, 0.14);
+      color: #4556b8;
+    }
+    .btn-secondary {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.28); }
+    .fineprint { margin: 14px 0 0; font-size: 13.5px; font-weight: 500; opacity: 0.85; text-shadow: var(--text-shadow); }
+
+    /* ---------- Popover ---------- */
+    .popover {
+      --arrow-x: 50%;
+      position: fixed; /* Hangs from the menu bar, which doesn't scroll either. */
+      z-index: 10;
+      top: calc(var(--menubar-h) + 15px);
+      left: 0;
+      width: 340px;
+      border-radius: 14px;
+      background: var(--popover-bottom);
+      color: var(--ink);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.32), 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .popover.ready { opacity: 1; }
+    .popover[hidden] { display: block; opacity: 0; transform: translateY(-6px); pointer-events: none; }
+    .popover::before {
+      content: "";
+      position: absolute;
+      top: -11px;
+      left: calc(var(--arrow-x) - 17px);
+      width: 34px;
+      height: 12px;
+      background: var(--popover-top);
+      clip-path: path("M0 12 C9 12 13 0 17 0 C21 0 25 12 34 12 Z");
+    }
+    .pop-top { background: var(--popover-top); border-radius: 14px 14px 0 0; }
+    .pop-header { display: flex; align-items: center; padding: 16px 16px 12px; border-bottom: 1px solid var(--hairline); }
+    .pop-header h2 { margin: 0; font-size: 14px; font-weight: 700; }
+    .pop-header p { margin: 1px 0 0; font-size: 11.5px; color: var(--secondary); }
+    .pop-header .tools { margin-left: auto; display: flex; gap: 12px; color: #333; }
+    .pop-header .tools svg { width: 16px; height: 16px; }
+    .pop-body { padding: 16px; }
+    .dropzone {
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 12px;
+      width: 100%;
+      height: 118px;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      background: rgba(0, 0, 0, 0.035);
+      color: rgba(0, 0, 0, 0.55);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .dropzone svg { width: 28px; height: 28px; color: rgba(0, 0, 0, 0.6); }
+    .dropzone:hover, .dropzone.over { background: rgba(82, 120, 219, 0.1); border-color: rgba(82, 120, 219, 0.5); }
+    .job { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; align-items: center; margin-top: 16px; }
+    .job-name { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .job-name span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .job-name span:last-child { font-size: 11px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+    .bar { height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.08); overflow: hidden; }
+    .bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: #9a9a9a; }
+    .job .cancel { grid-row: span 2; border: 0; padding: 0; background: none; color: rgba(0, 0, 0, 0.3); cursor: pointer; display: grid; }
+    .job .cancel svg { width: 16px; height: 16px; }
+    .job[hidden] { display: none; }
+    .recent { padding: 14px 0 4px; border-top: 1px solid var(--hairline); }
+    .recent h3 { margin: 0 16px 6px; font-size: 11.5px; font-weight: 500; color: var(--secondary); }
+    .recent ul { list-style: none; margin: 0; padding: 0; max-height: calc(100svh - 400px); min-height: 120px; overflow-y: auto; }
+    .recent li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 16px;
+      position: relative;
+      cursor: default;
+    }
+    .recent li + li::before { content: ""; position: absolute; top: 0; left: 64px; right: 0; border-top: 1px solid rgba(0, 0, 0, 0.08); }
+    .recent li:hover { background: rgba(0, 0, 0, 0.035); }
+    .recent li.fresh { animation: fresh 0.5s ease; }
+    @keyframes fresh { from { opacity: 0; transform: translateY(-8px); } }
+    .thumb {
+      flex: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #f1f1f1;
+      box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.1);
+      color: #666;
+    }
+    .thumb svg { width: 18px; height: 18px; }
+    .thumb.img svg, .thumb img { width: 100%; height: 100%; }
+    .thumb img { object-fit: cover; }
+    .meta { min-width: 0; }
+    .meta b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meta small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--secondary); }
+    .toast {
+      position: absolute;
+      left: 50%;
+      bottom: 14px;
+      transform: translate(-50%, 8px);
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(20, 20, 20, 0.86);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    /* ---------- macOS notification banners ---------- */
+    .notifications {
+      position: fixed;
+      z-index: 30;
+      top: calc(var(--menubar-h) + 8px);
+      right: 12px;
+      width: min(344px, calc(100vw - 24px));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .notification {
+      position: relative;
+      display: grid;
+      grid-template-columns: 38px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px 10px 10px;
+      border-radius: 16px;
+      background: rgba(246, 246, 246, 0.8);
+      -webkit-backdrop-filter: blur(30px) saturate(1.8);
+      backdrop-filter: blur(30px) saturate(1.8);
+      box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 10px 30px rgba(0, 0, 0, 0.18);
+      color: var(--ink);
+      font-size: 13px;
+      cursor: default;
+      pointer-events: auto;
+      animation: banner-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+    }
+    .notification.leaving { animation: banner-out 0.3s ease forwards; }
+    .notification img { width: 38px; height: 38px; }
+    .notification .n-text { min-width: 0; }
+    .notification b { display: block; font-weight: 600; }
+    .notification span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(0, 0, 0, 0.75); }
+    .notification time { align-self: start; font-size: 11.5px; color: var(--secondary); }
+    .notification .n-close {
+      position: absolute;
+      top: -6px;
+      left: -6px;
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(246, 246, 246, 0.95);
+      box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.15);
+      color: rgba(0, 0, 0, 0.6);
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .notification .n-close svg { width: 8px; height: 8px; }
+    .notification:hover .n-close, .notification .n-close:focus-visible { opacity: 1; }
+    @keyframes banner-in { from { transform: translateX(calc(100% + 24px)); } }
+    @keyframes banner-out { to { transform: translateX(calc(100% + 24px)); opacity: 0; } }
+
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+    /* ---------- Narrow screens: stack the popover under the copy ---------- */
+    @media (max-width: 1023px) {
+      .menubar .menus span { display: none; }
+      .clouds { width: max(100%, 780px); height: auto; left: 50%; transform: translateX(-50%); }
+      /* Keep the hills and the paper plane at the desktop proportions, just zoomed out. */
+      .hills { width: 200vw; height: calc(200vw * 250 / 1280); }
+      .trail { width: 100vw; }
+      .low-cloud { display: none; }
+      .hero { justify-content: flex-start; padding-bottom: calc(34vw + 48px); }
+      .copy { max-width: 640px; }
+      /* The popover only appears when the menu bar icon is tapped, floating under it like on a Mac. */
+      .popover:not(.floating) { display: none; }
+      .popover.floating {
+        position: fixed;
+        width: min(340px, calc(100vw - 24px));
+        animation: pop-in 0.18s ease;
+      }
+      .status-item.fs[aria-expanded="false"] { animation: nudge 2.4s ease-in-out 1s 3; }
+      @keyframes nudge { 0%, 60%, 100% { background: none; } 30% { background: rgba(255, 255, 255, 0.6); } }
+      @keyframes pop-in { from { opacity: 0; transform: translateY(-6px); } }
+    }
+    @media (max-width: 560px) {
+      .menubar { padding-left: 14px; }
+      .menubar .status { gap: 2px; }
+      .status-item.opt { display: none; }
+      .btn { flex: 1 1 100%; justify-content: center; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-plane" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M21.5 2.5 2.8 9.4l7.6 3.5 3.5 7.6zM21.5 2.5 10.4 12.9"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></g></symbol>
+      <symbol id="i-wifi" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5c3.9 0 7.4 1.5 10 4l-1.9 2A11.3 11.3 0 0 0 12 7.3c-3.1 0-6 1.2-8.1 3.2L2 8.5c2.6-2.5 6.1-4 10-4Zm0 5.2c2.5 0 4.7.9 6.4 2.5l-1.9 2A6.5 6.5 0 0 0 12 12.4c-1.7 0-3.3.7-4.5 1.8l-1.9-2c1.7-1.6 3.9-2.5 6.4-2.5Zm0 5.3c1.1 0 2.1.4 2.8 1.1L12 19l-2.8-2.9c.7-.7 1.7-1.1 2.8-1.1Z"/></symbol>
+      <symbol id="i-battery" viewBox="0 0 28 24"><g fill="none" stroke="currentColor"><rect x="1.5" y="6.5" width="22" height="11" rx="3.2" stroke-width="1.2" opacity=".5"/><path d="M25.5 10v4" stroke-width="1.8" stroke-linecap="round" opacity=".5"/></g><rect x="3.3" y="8.3" width="14" height="7.4" rx="1.8" fill="currentColor"/></symbol>
+      <symbol id="i-control" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="7" rx="3.5"/><rect x="3" y="13" width="18" height="7" rx="3.5"/></g><circle cx="17.5" cy="7.5" r="2.2" fill="currentColor"/><circle cx="6.5" cy="16.5" r="2.2" fill="currentColor"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 28 28"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="14" r="12.5"/><path d="M14 20V8m-5 5 5-5 5 5"/></g></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="16" cy="12" r="1.3"/></g></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M10.3 2.8h3.4l.5 2.6 1.9 1.1 2.5-.9 1.7 2.9-2 1.8v2.2l2 1.8-1.7 2.9-2.5-.9-1.9 1.1-.5 2.6h-3.4l-.5-2.6-1.9-1.1-2.5.9-1.7-2.9 2-1.8v-2.2l-2-1.8 1.7-2.9 2.5.9 1.9-1.1z"/><circle cx="12" cy="12" r="3"/></g></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m8.5 8.5 7 7m0-7-7 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-doc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M6 2.8h8l4.5 4.5v13.9H6z"/><path d="M14 2.8v4.5h4.5M9 12h6.5M9 15h6.5M9 18h4"/></g></symbol>
+      <symbol id="i-pdf" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="5" y="2.8" width="14" height="18.4" rx="2"/><path d="M8.5 7h3M8.5 10h3M13.5 7l2 3.5M15.5 7l-2 3.5M8.5 14h7M8.5 17h5"/></g></symbol>
+      <symbol id="i-video" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2.5" y="6.5" width="14" height="11" rx="2.5"/><path d="m16.5 10.5 5-3v9l-5-3z"/></g></symbol>
+      <symbol id="i-music" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 18V5.5l11-2.3V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></g></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M6 2.8h8l4.5 4.5v13.9H6z"/><path d="M11 3v2h2v2h-2v2h2v2h-2v2.5h2v2.5h-2z"/></g></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v12m-5-5 5 5 5-5M4.5 20.5h15"/></g></symbol>
+      <symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="menubar">
+    <nav class="menus" aria-hidden="true">
+      <b>FileShuttle</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span>Help</span>
+    </nav>
+    <div class="status">
+      <button class="status-item fs" id="fs-item" aria-expanded="true" aria-controls="popover" title="FileShuttle">
+        <svg><use href="#i-plane"/></svg><span class="sr-only">Toggle FileShuttle popover</span>
+      </button>
+      <span class="status-item opt" aria-hidden="true"><svg><use href="#i-search"/></svg></span>
+      <span class="status-item opt" aria-hidden="true"><svg><use href="#i-wifi"/></svg></span>
+      <span class="status-item" aria-hidden="true"><svg style="width:21px"><use href="#i-battery"/></svg></span>
+      <span class="status-item opt" aria-hidden="true"><svg><use href="#i-control"/></svg></span>
+      <time class="clock" id="clock">Tue 29 Sep 9:41</time>
+    </div>
+  </header>
+
+  <div class="notifications" id="notifications" aria-live="polite"></div>
+
+  <main class="scene">
+    <svg class="clouds" viewBox="0 0 1280 800" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+      <defs>
+        <g id="puffs">
+          <circle cx="-120" cy="0" r="60"/><circle cx="-60" cy="-30" r="80"/><circle cx="20" cy="-50" r="95"/>
+          <circle cx="100" cy="-25" r="75"/><circle cx="160" cy="0" r="55"/><circle cx="0" cy="10" r="70"/><circle cx="-170" cy="15" r="40"/>
+        </g>
+        <clipPath id="cloud-clip"><use href="#puffs"/></clipPath>
+        <linearGradient id="warm" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="#ffd6bd" stop-opacity=".75"/>
+          <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </linearGradient>
+        <filter id="glow" x="-40%" y="-60%" width="180%" height="220%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <g id="cloud">
+          <use href="#puffs" fill="#fff" fill-opacity=".85" filter="url(#glow)"/>
+          <rect x="-260" y="-50" width="520" height="150" fill="url(#warm)" clip-path="url(#cloud-clip)"/>
+        </g>
+      </defs>
+      <use href="#cloud" transform="translate(110 55) scale(.75)"/>
+      <use href="#cloud" transform="translate(600 55) scale(.8)"/>
+      <use href="#cloud" transform="translate(1210 240) scale(1.1)"/>
+      <use href="#cloud" transform="translate(1250 500) scale(.8)"/>
+      <use class="low-cloud" href="#cloud" transform="translate(790 650) scale(.55)"/>
+    </svg>
+
+    <svg class="hills" viewBox="0 0 1280 250" preserveAspectRatio="none" aria-hidden="true">
+      <path fill="#9e99d1" fill-opacity=".75" d="M0 250V40C160 40 160 0 320 0S480 60 640 60 800 10 960 10s160 40 320 40v200Z"/>
+      <path fill="#7373b8" fill-opacity=".85" d="M0 250V100c160 0 160 30 320 30S480 75 640 75s160 45 320 45 160-30 320-30v160Z"/>
+      <path fill="#4d4f8f" d="M0 250v-80c160 0 160-30 320-30s160 40 320 40 160-25 320-25 160 35 320 35v60Z"/>
+    </svg>
+
+    <svg class="trail" viewBox="0 0 640 250" aria-hidden="true">
+      <path fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 12"
+            d="M-20 200C140 230 250 210 300 140c40-60-10-105-60-80-50 30 140 90 320 5"/>
+      <g class="plane">
+        <path fill="#fff" style="filter:drop-shadow(0 4px 5px rgba(0,0,0,.2))"
+              d="M610 22 548 48l24 9 8 23Z"/>
+        <path fill="#dcdcf0" d="m610 22-38 35 8 23Z"/>
+      </g>
+    </svg>
+
+    <section class="hero">
+      <div class="copy">
+        <div class="brand"><img src="icon.png" alt="" width="88" height="88"><span>FileShuttle</span></div>
+        <h1>Drop a file.<br>Get a link.</h1>
+        <p class="lede">A tiny menu bar app that uploads to your own FTP, FTPS or SFTP server and puts the link on your clipboard.</p>
+        <div class="actions">
+          <a class="btn btn-primary" id="download" href="https://github.com/elalemanyo/fileshuttle/releases/download/v0.0.1/FileShuttle-0.0.1.dmg">
+            <svg><use href="#i-download"/></svg>Download for Mac <span class="version" id="version">v0.0.1</span>
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/elalemanyo/fileshuttle">
+            <svg><use href="#i-github"/></svg>View on GitHub
+          </a>
+        </div>
+        <p class="fineprint">Free and open source · macOS 15 or later · Apple Silicon &amp; Intel</p>
+      </div>
+
+      <aside class="popover" id="popover" aria-label="FileShuttle demo">
+        <div class="pop-top">
+          <div class="pop-header">
+            <div><h2>FileShuttle</h2><p>SFTP · files.example.com</p></div>
+            <div class="tools" aria-hidden="true"><svg><use href="#i-more"/></svg><svg><use href="#i-gear"/></svg></div>
+          </div>
+          <div class="pop-body">
+            <button class="dropzone" id="dropzone" type="button">
+              <svg aria-hidden="true"><use href="#i-upload"/></svg>
+              Drop files here or click to select
+            </button>
+            <input type="file" id="file-input" multiple hidden>
+            <div class="job" id="job">
+              <div>
+                <div class="job-name"><span id="job-name">Holiday photos.zip</span><span id="job-pct">64 %</span></div>
+                <div class="bar"><i id="job-bar" style="width:64%"></i></div>
+              </div>
+              <button class="cancel" id="job-cancel" type="button" title="Cancel"><svg><use href="#i-x"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <div class="recent">
+          <h3>Recent Uploads</h3>
+          <ul id="recent"></ul>
+        </div>
+        <div class="toast" id="toast" role="status">Link copied to clipboard</div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const REPO = "elalemanyo/fileshuttle";
+
+    // ---------- Latest release: point the button at the newest .dmg ----------
+    fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(release => {
+        const dmg = release.assets.find(a => a.name.endsWith(".dmg"));
+        if (!dmg) return;
+        document.getElementById("download").href = dmg.browser_download_url;
+        document.getElementById("version").textContent = release.tag_name.startsWith("v") ? release.tag_name : `v${release.tag_name}`;
+      })
+      .catch(() => {}); // Keep the hard-coded fallback link.
+
+    // ---------- Menu bar clock ----------
+    const clock = document.getElementById("clock");
+    function tick() {
+      const now = new Date();
+      const day = now.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }).replace(/,/g, "");
+      const time = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+      const text = `${day} ${time}`;
+      if (clock.textContent !== text) {
+        clock.textContent = text;
+        clock.dateTime = now.toISOString();
+        placePopover();
+      }
+    }
+
+    // ---------- Popover anchored under the menu bar icon ----------
+    const popover = document.getElementById("popover");
+    const fsItem = document.getElementById("fs-item");
+    const stacked = matchMedia("(max-width: 1023px)");
+    const floating = () => popover.classList.contains("floating");
+    function placePopover() {
+      if (stacked.matches && !floating()) {
+        popover.style.left = "";
+        popover.classList.add("ready");
+        return;
+      }
+      const icon = fsItem.getBoundingClientRect();
+      const center = icon.left + icon.width / 2;
+      const width = popover.offsetWidth;
+      const left = Math.min(Math.max(center - width / 2, 12), innerWidth - width - 12);
+      popover.style.left = `${left}px`;
+      popover.style.setProperty("--arrow-x", `${center - left}px`);
+      popover.classList.add("ready");
+    }
+    // Big screens: the popover hangs under the icon and the icon toggles it.
+    // Small screens: it stays hidden until the icon is tapped, then floats under the menu bar.
+    const setFloating = on => popover.classList.toggle("floating", on);
+    function setOpen(open) {
+      fsItem.setAttribute("aria-expanded", open);
+      if (stacked.matches) setFloating(open);
+      else popover.hidden = !open;
+      placePopover();
+    }
+    const isOpen = () => fsItem.getAttribute("aria-expanded") === "true";
+    fsItem.addEventListener("click", () => setOpen(!isOpen()));
+    document.addEventListener("click", e => {
+      if (isOpen() && !e.target.closest("#popover, #fs-item, #notifications")) setOpen(false);
+    });
+    addEventListener("keydown", e => { if (e.key === "Escape" && isOpen()) setOpen(false); });
+    stacked.addEventListener("change", () => {
+      setFloating(false);
+      popover.hidden = false;
+      fsItem.setAttribute("aria-expanded", !stacked.matches);
+      placePopover();
+    });
+    fsItem.setAttribute("aria-expanded", !stacked.matches);
+    addEventListener("resize", placePopover);
+    document.fonts?.ready.then(placePopover);
+
+    // ---------- Demo history ----------
+    const thumbs = {
+      screenshot: `<svg viewBox="0 0 36 36"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5473f2"/><stop offset="1" stop-color="#ab61e0"/></linearGradient></defs><rect width="36" height="36" fill="url(#g1)"/><rect x="0" y="3" width="36" height="28" fill="#fff"/><g fill="#e6e6e6"><rect x="3" y="9" width="24" height="2" rx="1"/><rect x="3" y="14" width="19" height="2" rx="1"/><rect x="3" y="19" width="27" height="2" rx="1"/><rect x="3" y="24" width="16" height="2" rx="1"/></g></svg>`,
+      sunset: `<svg viewBox="0 0 36 36"><defs><linearGradient id="g2" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#fa8c59"/><stop offset="1" stop-color="#fccc8c"/></linearGradient></defs><rect width="36" height="36" fill="url(#g2)"/><circle cx="18" cy="19" r="5" fill="#fff2cc"/><rect y="21" width="36" height="15" fill="#404d8c"/><path d="M0 36V22c12-8 24 4 36-3v17Z" fill="#2e3366"/></svg>`,
+      palette: `<svg viewBox="0 0 36 36">${["#ff2d55","#ff9500","#ffcc00","#30b0c7","#5856d6","#af52de"].map((c, i) => `<rect x="${i * 6}" width="6.5" height="36" fill="${c}"/>`).join("")}</svg>`,
+    };
+    const extOf = name => name.includes(".") ? name.split(".").pop().toLowerCase() : "";
+    const iconFor = name => {
+      const ext = extOf(name);
+      if (ext === "pdf") return "pdf";
+      if (["mp4", "mov", "m4v", "webm", "avi", "mkv"].includes(ext)) return "video";
+      if (["mp3", "m4a", "wav", "aac", "flac", "ogg", "aiff"].includes(ext)) return "music";
+      if (["zip", "gz", "tgz", "rar", "7z", "tar", "dmg"].includes(ext)) return "archive";
+      return "doc";
+    };
+
+    // ---------- Previews for dropped files, made locally like Quick Look thumbnails ----------
+    const THUMB = 96;
+    const TEXT_EXTS = ["txt", "md", "csv", "json", "js", "ts", "css", "html", "xml", "yml", "yaml", "swift", "py", "rb", "sh", "log"];
+    const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38";
+
+    function thumbCanvas(background = "#fff") {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = THUMB;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, THUMB, THUMB);
+      return [canvas, ctx];
+    }
+    // Scale to fill the square; documents stay pinned to the top of the first page.
+    function drawCover(source, width, height, anchorTop = false) {
+      const [canvas, ctx] = thumbCanvas();
+      const scale = Math.max(THUMB / width, THUMB / height);
+      const w = width * scale, h = height * scale;
+      ctx.drawImage(source, (THUMB - w) / 2, anchorTop ? 0 : (THUMB - h) / 2, w, h);
+      return canvas.toDataURL("image/png");
+    }
+    const withTimeout = (promise, ms = 8000) =>
+      Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))]);
+
+    async function imagePreview(url) {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return drawCover(img, img.naturalWidth || THUMB, img.naturalHeight || THUMB);
+    }
+    async function videoPreview(url) {
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.src = url;
+      await new Promise((resolve, reject) => { video.onloadeddata = resolve; video.onerror = reject; });
+      video.currentTime = Math.min(1, video.duration / 4 || 0);
+      await new Promise(resolve => { video.onseeked = resolve; });
+      return drawCover(video, video.videoWidth, video.videoHeight);
+    }
+    async function pdfPreview(file) {
+      const pdfjs = await import(`${PDFJS}/pdf.min.mjs`);
+      pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS}/pdf.worker.min.mjs`;
+      const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+      const page = await doc.getPage(1);
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: (THUMB * 2) / base.width });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      doc.destroy();
+      return drawCover(canvas, canvas.width, canvas.height, true);
+    }
+    async function textPreview(file) {
+      const text = await file.slice(0, 4000).text();
+      const [canvas, ctx] = thumbCanvas();
+      ctx.fillStyle = "#333";
+      ctx.font = "7px ui-monospace, Menlo, monospace";
+      text.split(/\r?\n/).slice(0, 12).forEach((line, i) => ctx.fillText(line.slice(0, 40), 8, 14 + i * 7.5));
+      return canvas.toDataURL("image/png");
+    }
+    async function makePreview(file) {
+      const type = file.type, ext = extOf(file.name);
+      const url = URL.createObjectURL(file);
+      try {
+        if (type.startsWith("image/")) return await withTimeout(imagePreview(url));
+        if (type.startsWith("video/")) return await withTimeout(videoPreview(url));
+        if (type === "application/pdf" || ext === "pdf") return await withTimeout(pdfPreview(file), 15000);
+        if (type.startsWith("text/") || TEXT_EXTS.includes(ext)) return await textPreview(file);
+      } catch {
+        // Unsupported format (e.g. HEIC outside Safari): fall back to the file-type icon.
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      return null;
+    }
+
+    const pad = n => String(n).padStart(2, "0");
+    const shot = new Date(Date.now() - 30e3);
+    const shotName = `Screenshot ${shot.getFullYear()}-${pad(shot.getMonth() + 1)}-${pad(shot.getDate())} at ${pad(shot.getHours())}.${pad(shot.getMinutes())}.png`;
+    const ago = min => Date.now() - min * 60e3;
+    const history = [
+      { name: shotName, size: 812e3, date: ago(0.5), thumb: "screenshot" },
+      { name: "invoice-september.pdf", size: 96e3, date: ago(12) },
+      { name: "sunset-lisbon.jpg", size: 2.4e6, date: ago(47), thumb: "sunset" },
+      { name: "product-demo.mp4", size: 48.2e6, date: ago(180) },
+      { name: "brand-colors.png", size: 364e3, date: ago(60 * 26), thumb: "palette" },
+      { name: "meeting-notes.txt", size: 4e3, date: ago(60 * 50) },
+    ];
+
+    const num = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
+    function formatSize(bytes) {
+      if (bytes < 1e6) return `${num.format(Math.max(1, Math.round(bytes / 1e3)))} KB`;
+      if (bytes < 1e9) return `${num.format(bytes / 1e6)} MB`;
+      return `${num.format(bytes / 1e9)} GB`;
+    }
+    const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+    function formatAgo(date) {
+      const s = Math.round((Date.now() - date) / 1e3);
+      if (s < 5) return "just now";
+      if (s < 60) return rtf.format(-s, "second");
+      if (s < 3600) return rtf.format(-Math.floor(s / 60), "minute");
+      if (s < 86400) return rtf.format(-Math.floor(s / 3600), "hour");
+      return rtf.format(-Math.floor(s / 86400), "day");
+    }
+    const escape = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+    const list = document.getElementById("recent");
+    function renderHistory(freshIndex = -1) {
+      list.innerHTML = history.slice(0, 6).map((item, i) => `
+        <li${i === freshIndex ? ' class="fresh"' : ""} title="Click to copy link">
+          <span class="thumb${item.thumb || item.preview ? " img" : ""}">${
+            item.preview ? `<img src="${item.preview}" alt="">`
+            : item.thumb ? thumbs[item.thumb]
+            : `<svg><use href="#i-${iconFor(item.name)}"/></svg>`}</span>
+          <span class="meta"><b>${escape(item.name)}</b><small>${formatSize(item.size)} · ${formatAgo(item.date)}</small></span>
+        </li>`).join("");
+    }
+    list.addEventListener("click", e => { if (e.target.closest("li")) showToast(); });
+
+    const toast = document.getElementById("toast");
+    let toastTimer;
+    function showToast() {
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 1800);
+    }
+
+    // Same banner the app posts when an upload finishes (see Notifier.swift).
+    const notifications = document.getElementById("notifications");
+    function notify(name) {
+      const el = document.createElement("div");
+      el.className = "notification";
+      el.innerHTML = `<img src="icon.png" alt=""><div class="n-text"><b>Link copied</b><span>${escape(name)}</span></div><time>now</time>
+        <button class="n-close" type="button" aria-label="Close"><svg viewBox="0 0 8 8"><path d="m1 1 6 6m0-6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>`;
+      let timer;
+      const dismiss = () => {
+        clearTimeout(timer);
+        if (reduced) return el.remove();
+        el.classList.add("leaving");
+        el.addEventListener("animationend", () => el.remove(), { once: true });
+      };
+      el.addEventListener("click", dismiss);
+      el.addEventListener("mouseenter", () => clearTimeout(timer));
+      el.addEventListener("mouseleave", () => { timer = setTimeout(dismiss, 2500); });
+      timer = setTimeout(dismiss, 5000);
+      notifications.prepend(el);
+      while (notifications.children.length > 3) notifications.lastElementChild.remove();
+    }
+
+    // ---------- Demo uploads (nothing leaves the browser) ----------
+    const job = document.getElementById("job");
+    const jobName = document.getElementById("job-name");
+    const jobPct = document.getElementById("job-pct");
+    const jobBar = document.getElementById("job-bar");
+    const queue = [];
+    let current = null;
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function startUpload(file, from = 0) {
+      current = { entry: file, name: file.name, size: file.size, started: performance.now(), from };
+      job.hidden = false;
+      jobName.textContent = file.name;
+      requestAnimationFrame(step);
+    }
+    function step(now) {
+      if (!current) return;
+      const duration = reduced ? 400 : 1600 + Math.min(current.size / 1e6, 50) * 60;
+      const t = Math.min((now - current.started) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 2);
+      const pct = Math.round(current.from + (100 - current.from) * eased);
+      jobPct.textContent = `${pct} %`;
+      jobBar.style.width = `${pct}%`;
+      if (t < 1) return requestAnimationFrame(step);
+      const { entry } = current;
+      entry.date = Date.now();
+      history.unshift(entry);
+      current = null;
+      renderHistory(0);
+      notify(entry.name);
+      if (queue.length) setTimeout(() => startUpload(queue.shift()), 350);
+      else job.hidden = true;
+    }
+    function enqueue(files) {
+      clearTimeout(introTimer); // A real drop replaces the scripted intro upload.
+      for (const f of files) {
+        const entry = { name: f.name, size: f.size || 1e3, preview: null };
+        // The preview usually lands before the fake upload finishes; re-render if it arrives later.
+        makePreview(f).then(preview => {
+          entry.preview = preview;
+          if (preview && history.includes(entry)) renderHistory();
+        });
+        queue.push(entry);
+      }
+      if (!current && queue.length) startUpload(queue.shift());
+    }
+    document.getElementById("job-cancel").addEventListener("click", () => {
+      current = null;
+      queue.length = 0;
+      job.hidden = true;
+    });
+
+    const dropzone = document.getElementById("dropzone");
+    const input = document.getElementById("file-input");
+    dropzone.addEventListener("click", () => input.click());
+    input.addEventListener("change", () => { enqueue(input.files); input.value = ""; });
+    addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("over"); });
+    addEventListener("dragleave", e => { if (!e.relatedTarget) dropzone.classList.remove("over"); });
+    addEventListener("drop", e => {
+      e.preventDefault();
+      dropzone.classList.remove("over");
+      if (e.dataTransfer.files.length) enqueue(e.dataTransfer.files);
+    });
+
+    // ---------- Boot ----------
+    renderHistory();
+    tick();
+    setInterval(tick, 1000);
+    setInterval(() => { if (!current) renderHistory(); }, 15e3);
+    // Finish the "Holiday photos.zip" upload shown in the screenshot after a short pause.
+    const introTimer = setTimeout(() => startUpload({ name: "Holiday photos.zip", size: 18.6e6 }, 64), reduced ? 0 : 2200);
+  </script>
+</body>
+</html>
