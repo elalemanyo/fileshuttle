@@ -1,0 +1,57 @@
+name: FileShuttle
+options:
+  bundleIdPrefix: de.elalemanyo
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+
+packages:
+  ShuttleKit:
+    path: Packages/ShuttleKit
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 3.1.0
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.0.1"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  FileShuttle:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - package: ShuttleKit
+      - package: KeyboardShortcuts
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: FileShuttle
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Any File
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: None
+            LSItemContentTypes: [public.item, public.folder]
+        LSApplicationCategoryType: public.app-category.productivity
+        NSHumanReadableCopyright: "Drop files in the menu bar, get a link."
+    entitlements:
+      path: App/FileShuttle.entitlements
+      properties: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.elalemanyo.FileShuttle
+        PRODUCT_NAME: FileShuttle
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        DEAD_CODE_STRIPPING: YES
