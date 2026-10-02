@@ -42,5 +42,11 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Drop files in the menu bar, get a link.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/elalemanyo/fileshuttle/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_KEY)</string>
 </dict>
 </plist>

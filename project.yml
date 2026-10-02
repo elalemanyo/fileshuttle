@@ -11,6 +11,9 @@ packages:
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
     from: 3.1.0
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.0
 
 settings:
   base:
@@ -27,6 +30,7 @@ targets:
     dependencies:
       - package: ShuttleKit
       - package: KeyboardShortcuts
+      - package: Sparkle
     info:
       path: App/Info.plist
       properties:
@@ -41,9 +45,16 @@ targets:
             LSItemContentTypes: [public.item, public.folder]
         LSApplicationCategoryType: public.app-category.productivity
         NSHumanReadableCopyright: "Drop files in the menu bar, get a link."
+        # Sparkle: the appcast is attached to every GitHub release by the release workflow.
+        SUFeedURL: https://github.com/elalemanyo/fileshuttle/releases/latest/download/appcast.xml
+        SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
+        SUEnableAutomaticChecks: true
     entitlements:
       path: App/FileShuttle.entitlements
-      properties: {}
+      properties:
+        # Ad-hoc signatures have no Team ID, so the hardened runtime's library validation would refuse
+        # to load the embedded Sparkle.framework. Needed until we sign with a Developer ID.
+        com.apple.security.cs.disable-library-validation: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.elalemanyo.FileShuttle
@@ -55,3 +66,10 @@ targets:
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         DEAD_CODE_STRIPPING: YES
+        # Sparkle stays disabled without a public key, so Debug builds from Xcode never check for updates.
+        SPARKLE_PUBLIC_KEY: ""
+      configs:
+        Release:
+          # Public half of the Sparkle signing key; CI signs updates with the private half
+          # (SPARKLE_PRIVATE_KEY secret, see scripts/make-appcast.sh).
+          SPARKLE_PUBLIC_KEY: EE83FbrLIVz0s94n4Mav5DnmZZ4aFA/9FACzeY2sKlg=

@@ -31,6 +31,8 @@ Or remove the quarantine flag in Terminal:
 xattr -dr com.apple.quarantine /Applications/FileShuttle.app
 ```
 
+FileShuttle keeps itself up to date with [Sparkle](https://sparkle-project.org). You can also use **Check for Updates…** in the ••• menu.
+
 ## Setup
 
 1. Click the FileShuttle icon in the menubar
@@ -75,6 +77,18 @@ A quick map of the code:
 - `scripts/` - helpers to build the DMG, render the preview image and start test servers
 
 Tests live in the upload engine: run `swift test` inside `Packages/ShuttleKit`. Want to try real uploads? `scripts/test-servers.sh` starts local FTP and SFTP servers in Docker, then run `SHUTTLE_INTEGRATION=1 swift test`.
+
+### Releasing
+
+Push a tag and GitHub Actions does the rest:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The workflow builds a universal DMG (`scripts/make-dmg.sh`), signs it for Sparkle and writes `appcast.xml` (`scripts/make-appcast.sh`), then publishes both on the GitHub release. Installed apps find the update through `releases/latest/download/appcast.xml`. Tags with a `-` (like `v0.2.0-beta.1`) become pre-releases, which installed apps ignore.
+
+Updates are signed with a Sparkle EdDSA key: the public key is `SPARKLE_PUBLIC_KEY` in `project.yml` (Release builds only, so Debug builds from Xcode never check for updates), the private key is the `SPARKLE_PRIVATE_KEY` repository secret.
 
 Not sure where to start? Small things help too: trying it with your hosting provider, improving the docs, or sharing how you use it.
 

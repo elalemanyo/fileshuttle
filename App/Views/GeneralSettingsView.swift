@@ -11,6 +11,8 @@ struct GeneralSettingsView: View {
     @AppStorage(PrefKey.playSound) private var playSound = true
 
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var checkForUpdates = Updater.shared.automaticallyChecksForUpdates
+    @State private var installUpdates = Updater.shared.automaticallyDownloadsUpdates
     @State private var loginError: String?
 
     var body: some View {
@@ -52,6 +54,20 @@ struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            if Updater.shared.isConfigured {
+                Section("Updates") {
+                    Toggle("Automatically check for updates", isOn: $checkForUpdates)
+                        .onChange(of: checkForUpdates) { _, enabled in
+                            Updater.shared.automaticallyChecksForUpdates = enabled
+                        }
+                    Toggle("Automatically download and install updates", isOn: $installUpdates)
+                        .disabled(!checkForUpdates)
+                        .onChange(of: installUpdates) { _, enabled in
+                            Updater.shared.automaticallyDownloadsUpdates = enabled
+                        }
+                }
+            }
         }
         .formStyle(.grouped)
         .fixedSize(horizontal: false, vertical: true)
@@ -87,6 +103,10 @@ struct AboutView: View {
                 .frame(width: 80, height: 80)
             Text("FileShuttle").font(.title2.weight(.semibold))
             Text(version).foregroundStyle(.secondary)
+            if Updater.shared.isConfigured {
+                Button("Check for Updates…") { Updater.shared.checkForUpdates() }
+                    .disabled(!Updater.shared.canCheckForUpdates)
+            }
             Text("Drop files on the menu bar icon and get a shareable link.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)

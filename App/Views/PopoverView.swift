@@ -28,6 +28,9 @@ struct PopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if let version = Updater.shared.availableVersion {
+                UpdateBanner(version: version)
+            }
             Divider()
 
             if model.isConfigured {
@@ -71,15 +74,31 @@ struct PopoverView: View {
             Spacer()
 
             Menu {
+                if let version = Updater.shared.availableVersion {
+                    Button("Install Update \(version)…") { Updater.shared.checkForUpdates() }
+                    Divider()
+                }
                 Button("Upload Clipboard") { model.uploadClipboard() }
                 Button("Choose Files…") { model.chooseFiles() }
                 Divider()
                 Button("Clear History", role: .destructive) { model.history.clear() }
                     .disabled(model.history.items.isEmpty)
                 Divider()
+                if Updater.shared.isConfigured {
+                    Button("Check for Updates…") { Updater.shared.checkForUpdates() }
+                        .disabled(!Updater.shared.canCheckForUpdates)
+                }
                 Button("Quit FileShuttle") { NSApp.terminate(nil) }
             } label: {
                 Image(systemName: "ellipsis.circle")
+                    .overlay(alignment: .topTrailing) {
+                        if Updater.shared.availableVersion != nil {
+                            Circle()
+                                .fill(.tint)
+                                .frame(width: 6, height: 6)
+                                .offset(x: 2, y: -2)
+                        }
+                    }
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -177,6 +196,26 @@ private struct JobRow: View {
             .help("Cancel upload")
         }
         .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+}
+
+/// Shown when Sparkle found an update the user hasn't looked at yet.
+private struct UpdateBanner: View {
+    let version: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(.tint)
+            Text("FileShuttle \(version) is available")
+                .font(.callout)
+            Spacer()
+            Button("Install") { Updater.shared.checkForUpdates() }
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.tint.opacity(0.1))
     }
 }
 

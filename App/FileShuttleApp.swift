@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.makeMainMenu()
+        _ = Updater.shared
         model = AppModel()
         #if DEBUG
         if Snapshots.runIfRequested(model: model) {

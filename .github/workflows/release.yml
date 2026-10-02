@@ -63,6 +63,16 @@ jobs:
           shasum -a 256 "$(basename "${{ steps.dmg.outputs.dmg }}")" > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      - name: Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "::warning::SPARKLE_PRIVATE_KEY isn't set, so no appcast.xml is published and installed apps won't see this release."
+            exit 0
+          fi
+          scripts/make-appcast.sh "${{ steps.dmg.outputs.dmg }}"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
@@ -81,11 +91,14 @@ jobs:
           files: |
             ${{ steps.dmg.outputs.dmg }}
             build/dmg/SHA256SUMS.txt
+            build/dmg/appcast.xml
           body: |
             ## Install
 
             1. Download **FileShuttle-${{ steps.version.outputs.version }}.dmg** and drag FileShuttle to Applications.
             2. The app isn't notarized by Apple, so the first launch is blocked. Open **System Settings → Privacy & Security** and click **Open Anyway** (only once).
                Or run: `xattr -dr com.apple.quarantine /Applications/FileShuttle.app`
+
+            Already installed? FileShuttle updates itself — use **Check for Updates…** in the ••• menu. (Coming from 0.0.1? Install this version once by hand; updates are automatic from here on.)
 
             Requires macOS 15 or later. Runs on Apple Silicon and Intel.

@@ -29,8 +29,15 @@ xcodebuild build -quiet \
   ${VERSION_OVERRIDES[@]+"${VERSION_OVERRIDES[@]}"}
 
 APP=build/dmg-derived/Build/Products/Release/FileShuttle.app
-# Re-sign ad hoc with hardened runtime so every nested binary has a consistent signature.
-codesign --force --deep --options runtime --sign - "$APP"
+# Re-sign ad hoc with hardened runtime, inside out, as Sparkle documents.
+# No --deep: it would put the app's entitlements on Sparkle's helpers.
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+codesign -f -s - -o runtime "$SPARKLE/Versions/B/XPCServices/Installer.xpc"
+codesign -f -s - -o runtime --preserve-metadata=entitlements "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"
+codesign -f -s - -o runtime "$SPARKLE/Versions/B/Autoupdate"
+codesign -f -s - -o runtime "$SPARKLE/Versions/B/Updater.app"
+codesign -f -s - -o runtime "$SPARKLE"
+codesign -f -s - -o runtime --entitlements App/FileShuttle.entitlements "$APP"
 codesign --verify --deep --strict "$APP"
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
