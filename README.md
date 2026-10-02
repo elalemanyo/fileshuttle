@@ -25,6 +25,12 @@ A modern rewrite of the original [FileShuttle](https://github.com/FileShuttle/fi
 
 The app isn't notarized by Apple, so macOS blocks the first launch. Open **System Settings → Privacy & Security** and click **Open Anyway** (only once).
 
+Or remove the quarantine flag in Terminal:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/FileShuttle.app
+```
+
 ## Setup
 
 1. Click the FileShuttle icon in the menubar
