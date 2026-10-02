@@ -74,4 +74,4 @@ Not sure where to start? Small things help too: trying it with your hosting prov
 
 ## License
 
-MIT
+[MIT](LICENSE)
